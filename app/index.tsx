@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Button } from 'react-native';
+import { Text, View, StyleSheet, Button, Alert, FlatList } from 'react-native';
 
 import * as Location from 'expo-location';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions, BarcodeType, BarcodeScanningResult } from 'expo-camera';
+
+interface ScannedCode {
+    code: BarcodeScanningResult;
+    location: Location.LocationObject
+};
+
 
 export default () => {
     const [location, setLocation] =useState<Location.LocationObject|null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [facing, setFacing] = useState<CameraType>('back');
     const [permission, requestPermission] = useCameraPermissions();
-
-
+    const [ScannedCode, setScannedCode] = useState<ScannedCode[]>([]);
 
     useEffect(() => {
         async function getCurrentLocation() {
@@ -22,6 +27,7 @@ export default () => {
 
             let location = await Location.getCurrentPositionAsync();
             setLocation(location);
+
         }
         getCurrentLocation();
     }, []);
@@ -46,12 +52,45 @@ export default () => {
         text = JSON.stringify(location);
     }
 
+    const onBarcodeScanned = function (result: BarcodeScanningResult) {
+        if (window) {
+            window.alert(result.data);
+        } else {
+            Alert.alert(result.data);
+        }
+        setScannedCode([{code:result, location:location!}, ...ScannedCode]);
+    };
+
+    const ScannedItem = function({item}:{item:ScannedCode}) {
+        return (
+        <View>
+            <Text>{item.code.data}</Text>
+            { item.location && (
+                <>
+                <Text>{item.location.timestamp}</Text>
+                <Text>{item.location.coords.latitude}, Long:{item.location.coords.longitude}</Text>
+                </>
+            )}
+        </View>
+        );
+    }
+
     return (
         <View>
             <Text>GPS: {text}</Text>
-            <CameraView facing={facing} style={styles.cameraView}>
-                
-            </CameraView>
+            <CameraView 
+                style={styles.cameraView} 
+                facing={facing} 
+                barcodeScannerSettings={{
+                    barcodeTypes: ["qr", "code128", "datamatrix", "aztec"]
+                }}
+                onBarcodeScanned={onBarcodeScanned}
+            /> 
+            <FlatList 
+                data={ScannedCode} 
+                keyExtractor={(item) => item.location.timestamp.toFixed(0)} 
+                renderItem={ScannedItem}
+            />
         </View>
     );
 };
