@@ -4,10 +4,19 @@ import { Text, View, StyleSheet, Button, FlatList, TouchableOpacity } from "reac
 import * as Location from "expo-location";
 import * as Clipboard from "expo-clipboard"
 import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } from "expo-camera";
-import { connectDb } from "../src/database";
-
-
+import { connectDb, Database } from "../src/database";
+import * as Notifications from "expo-notifications";
 import { ScannedCode } from "../src/models";
+
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+    })
+});
+
 
 export default () => {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -15,6 +24,7 @@ export default () => {
     const [facing, setFacing] = useState<CameraType>("back");
     const [permission, requestPermission] = useCameraPermissions();
     const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([]);
+    const [db, setDb] = useState<Database>();
 
     useEffect(() => {
         async function getCurrentLocation() {
@@ -68,6 +78,16 @@ export default () => {
         console.log(await db.consultarCodigos())
     }
 
+    const showNotification = async function () {
+        Notifications.scheduleNotificationAsync({
+            content: {
+                title: 'Hola',
+                body: 'Probando'
+            },
+            trigger: null
+        });
+    }
+
     const ScannedItem = function ({ item }: { item: ScannedCode }) {
       const onCopyPress = function(){
         Clipboard.setStringAsync(item.data);
@@ -89,6 +109,7 @@ export default () => {
     }
     return (
         <View >
+            <Button title="Mostrar notificación" onPress={showNotification}/>
             <Text >GPS: {text}</Text>
             <CameraView facing={facing} style={styles.CameraView}
                 barcodeScannerSettings={{
