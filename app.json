@@ -49,6 +49,12 @@
         "enableFTS": true,
         "useSQLCipher": true
       }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "C02060"
+        }
       ]
     ]
   }
