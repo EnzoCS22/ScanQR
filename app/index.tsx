@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Text, View, StyleSheet, Button, FlatList, TouchableOpacity } from "react-native";
+import { Text, View, StyleSheet, Button, FlatList, TouchableOpacity, Alert } from "react-native";
 
 import * as Location from "expo-location";
 import * as Clipboard from "expo-clipboard"
@@ -7,6 +7,7 @@ import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } f
 import { connectDb, Database } from "../src/database";
 import * as Notifications from "expo-notifications";
 import { ScannedCode } from "../src/models";
+import { getAll } from "../src/webservice";
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -57,6 +58,20 @@ export default () => {
         );
     }
 
+    useEffect(() => {
+        if (!db) return;
+
+        (async  () => {
+            // setScannedCodes(await db.consultarCodigos());
+            setScannedCodes(await getAll());
+        })();
+    
+        return () => {
+            db.close();
+        }
+    }, [db]);
+
+
     let text = 'Waiting..';
     if (errorMsg) {
         text = errorMsg;
@@ -67,16 +82,18 @@ export default () => {
 
     const onBarcodeScanned = async function (result: BarcodeScanningResult) {
         if (window) {
-            window.alert(result.data)
+            window.alert(result.data);
         } else {
-            alert(result.data)
+            Alert.alert(result.data);
         }
         
-        const db = await connectDb();
-        await db.insertarCodigo(result.data, result.type);
-        setScannedCodes(await db.consultarCodigos());
-        console.log(await db.consultarCodigos())
-    }
+        create({data: result.data, type: result.type});
+        setScannedCodes(await getAll());
+
+        // if (!db) return;
+        // await db.insertarCodigo(result.data, result.type);
+        // setScannedCodes(await db.consultarCodigos());
+    };
 
     const showNotification = async function () {
         Notifications.scheduleNotificationAsync({
