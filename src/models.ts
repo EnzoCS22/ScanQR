@@ -1,5 +1,5 @@
 export interface ScannedCode{
-    id:string
+    id?:string
     data:string
     type:string
 }

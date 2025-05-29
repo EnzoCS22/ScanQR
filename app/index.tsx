@@ -7,6 +7,7 @@ import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } f
 import { connectDb, Database } from "../src/database";
 import * as Notifications from "expo-notifications";
 import { ScannedCode } from "../src/models";
+import { getAll, create } from "../src/webservice";
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -42,7 +43,16 @@ export default () => {
             setScannedCodes(await db.consultarCodigos());
         }
         getCurrentLocation();
-        retrieveLocalDbData();
+        //retrieveLocalDbData();
+    }, []);
+
+    useEffect(() => {   
+        (async () => {
+            setScannedCodes(await getAll());
+        })();  
+
+        return () => {
+        }
     }, []);
 
     if (!permission) {
@@ -72,10 +82,13 @@ export default () => {
             alert(result.data)
         }
         
-        const db = await connectDb();
-        await db.insertarCodigo(result.data, result.type);
-        setScannedCodes(await db.consultarCodigos());
-        console.log(await db.consultarCodigos())
+        create({data: result.data, type: result.type});
+        setScannedCodes(await getAll());
+
+        //const db = await connectDb();
+        //await db.insertarCodigo(result.data, result.type);
+        //setScannedCodes(await db.consultarCodigos());
+        //console.log(await db.consultarCodigos())
     }
 
     const showNotification = async function () {
@@ -118,7 +131,7 @@ export default () => {
                 onBarcodeScanned={onBarcodeScanned}
             />
             <FlatList data={scannedCodes}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item.id || ""}
                 renderItem={ScannedItem}
             />
         </View>
