@@ -38,48 +38,6 @@ export class Database {
       }
     } catch (error) {
       console.error("Error en migración:", error)
-      // Si hay error, podemos recrear la tabla
-      await this.recreateTable()
-    }
-  }
-
-  // Función para recrear la tabla con el nuevo esquema  
-  private async recreateTable() {
-    try {
-      console.log("Recreando tabla con nuevo esquema...")
-
-      // Respaldar datos existentes
-      const existingData = await this.db.getAllAsync<{ id: string; data: string; type: string }>(
-        "SELECT * FROM codigos",
-      )
-
-      // Eliminar tabla existente
-      await this.db.execAsync("DROP TABLE IF EXISTS codigos")
-
-      // Crear nueva tabla con timestamp
-      await this.db.execAsync(
-        `CREATE TABLE codigos (
-        id TEXT PRIMARY KEY NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-        data TEXT NOT NULL DEFAULT '',
-        type TEXT NOT NULL DEFAULT 'qr',
-        timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
-      );`,
-      )
-
-      // Restaurar datos existentes con timestamp actual
-      for (const row of existingData as Array<{ id: string; data: string; type: string }>) {
-        await this.db.runAsync(
-          "INSERT INTO codigos (id, data, type, timestamp) VALUES (?, ?, ?, ?)",
-          row.id,
-          row.data,
-          row.type,
-          Date.now(),
-        )
-      }
-
-      console.log("Tabla recreada exitosamente")
-    } catch (error) {
-      console.error("Error recreando tabla:", error)
     }
   }
 
@@ -102,50 +60,19 @@ export class Database {
     return result
   }
 
-  // Nueva función para limpiar todos los códigos
   async limpiarCodigos(): Promise<void> {
     await this.db.runAsync("DELETE FROM codigos")
   }
 
-  // Función para eliminar un código específico
   async eliminarCodigo(id: string): Promise<void> {
     await this.db.runAsync("DELETE FROM codigos WHERE id = ?", id)
   }
 
-  // Función para verificar si un código ya existe (para evitar duplicados)
   async existeCodigo(data: string): Promise<boolean> {
     const result = await this.db.getFirstAsync<{ count: number }>(
       "SELECT COUNT(*) as count FROM codigos WHERE data = ?",
       data,
     )
     return (result?.count || 0) > 0
-  }
-
-  // Función para obtener estadísticas
-  async obtenerEstadisticas(): Promise<{
-    total: number
-    porTipo: { type: string; count: number }[]
-    ultimoEscaneo: string | null
-  }> {
-    const total = await this.db.getFirstAsync<{ count: number }>("SELECT COUNT(*) as count FROM codigos")
-
-    const porTipo = await this.db.getAllAsync<{ type: string; count: number }>(
-      "SELECT type, COUNT(*) as count FROM codigos GROUP BY type ORDER BY count DESC",
-    )
-
-    const ultimoEscaneo = await this.db.getFirstAsync<{ timestamp: number }>(
-      "SELECT timestamp FROM codigos ORDER BY timestamp DESC LIMIT 1",
-    )
-
-    return {
-      total: total?.count || 0,
-      porTipo: porTipo || [],
-      ultimoEscaneo: ultimoEscaneo ? new Date(ultimoEscaneo.timestamp).toISOString() : null,
-    }
-  }
-
-  // Función pública para forzar migración
-  async migrarEsquema(): Promise<void> {
-    await this.recreateTable()
   }
 }

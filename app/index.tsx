@@ -6,16 +6,13 @@ import * as Clipboard from "expo-clipboard"
 import { CameraView, type CameraType, useCameraPermissions, type BarcodeScanningResult } from "expo-camera"
 import * as Notifications from "expo-notifications"
 
-// Importamos nuestras clases de base de datos local
-import { connectDb, type Database } from "../src/database"
+   import { connectDb, type Database } from "../src/database"
 import type { ScannedCode } from "../src/models"
 import styles from "./styles"
 
-// === CONFIGURACIÓN DE MODO LOCAL ===
 const isLocalMode = true
 const API_URL = "http://localhost:3000"
 
-// Configuración del manejador de notificaciones
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -34,11 +31,6 @@ export default function QRScannerScreen() {
   const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([])
   const [db, setDB] = useState<Database>()
   const [isSyncing, setIsSyncing] = useState(false)
-  const [stats, setStats] = useState<{ total: number; porTipo: any[]; ultimoEscaneo: string | null }>({
-    total: 0,
-    porTipo: [],
-    ultimoEscaneo: null,
-  })
 
   // === REFS PARA CONTROL DE ESCANEO ===
   const lastScannedCode = useRef<string>("")
@@ -84,13 +76,11 @@ export default function QRScannerScreen() {
     }
   }, [])
 
-  // Función para actualizar datos y estadísticas
+  // Función para actualizar datos
   const updateData = async (database: Database) => {
     try {
       const codes = await database.consultarCodigos()
-      const statistics = await database.obtenerEstadisticas()
       setScannedCodes(codes)
-      setStats(statistics)
     } catch (error) {
       console.error("Error actualizando datos:", error)
     }
@@ -101,19 +91,16 @@ export default function QRScannerScreen() {
     const currentTime = Date.now()
     const scannedData = result.data
 
-    //Verificar si ya estamos procesando
     if (isProcessingRef.current) {
       console.log("Escaneo ignorado: ya procesando")
       return
     }
 
-    //Verificar si es el mismo código muy reciente
     if (lastScannedCode.current === scannedData && currentTime - lastScannedTime.current < SCAN_COOLDOWN) {
       console.log("scaneo ignorado: mismo código muy reciente")
       return
     }
 
-    //Marcar como procesando
     isProcessingRef.current = true
     lastScannedCode.current = scannedData
     lastScannedTime.current = currentTime
@@ -126,10 +113,7 @@ export default function QRScannerScreen() {
         if (existe) {
           await showNotification(`Código ya escaneado: ${scannedData}`)
         } else {
-          // Mostrar notificación
           await showNotification(`Nuevo código escaneado: ${scannedData}`)
-
-          // Guardar en base de datos
           await db.insertarCodigo(scannedData, result.type)
           await updateData(db)
         }
@@ -138,7 +122,6 @@ export default function QRScannerScreen() {
       console.error("Error procesando escaneo:", error)
       Alert.alert("Error", "No se pudo procesar el código escaneado")
     } finally {
-      // 🔓 LIBERAR DESPUÉS DEL TIMEOUT
       scanTimeoutRef.current = setTimeout(() => {
         isProcessingRef.current = false
         console.log("Escaneo desbloqueado")
@@ -327,24 +310,8 @@ export default function QRScannerScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>QR Scanner {isLocalMode ? "(Modo Local)" : ""}</Text>
+        <Text style={styles.title}>QR Scanner</Text>
         <Text style={styles.subtitle}>{locationText}</Text>
-
-        {/* Estadísticas */}
-        <View style={styles.statsContainer}>
-          <Text style={styles.statsText}>Total: {stats.total}</Text>
-          {stats.ultimoEscaneo && (
-            <Text style={styles.statsText}>Último: {new Date(stats.ultimoEscaneo).toLocaleTimeString()}</Text>
-          )}
-        </View>
-
-        {/* Indicador de estado de escaneo */}
-        <View style={styles.statusContainer}>
-          <View
-            style={[styles.statusIndicator, { backgroundColor: isProcessingRef.current ? "#f39c12" : "#27ae60" }]}
-          />
-          <Text style={styles.statusText}>{isProcessingRef.current ? "Procesando..." : "Listo para escanear"}</Text>
-        </View>
       </View>
 
       {/* Cámara */}
@@ -388,11 +355,6 @@ export default function QRScannerScreen() {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={() => setFacing(facing === "back" ? "front" : "back")}>
-          <Ionicons name="camera-reverse-outline" size={20} color="#fff" />
-          <Text style={styles.buttonText}>Voltear</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.button, styles.clearButton]}
           onPress={clearScannedCodes}
@@ -405,7 +367,7 @@ export default function QRScannerScreen() {
 
       {/* Lista de códigos */}
       <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>Códigos Escaneados ({stats.total})</Text>
+        <Text style={styles.listTitle}>Códigos Escaneados ({scannedCodes.length})</Text>
 
         {scannedCodes.length > 0 ? (
           <FlatList
@@ -419,7 +381,6 @@ export default function QRScannerScreen() {
           <View style={styles.emptyContainer}>
             <Ionicons name="scan-outline" size={48} color="#ccc" />
             <Text style={styles.emptyText}>No hay códigos escaneados</Text>
-            <Text style={styles.emptySubtext}>Apunta la cámara hacia un código QR o código de barras</Text>
           </View>
         )}
       </View>
