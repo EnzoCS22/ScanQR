@@ -37,8 +37,8 @@ const styles = StyleSheet.create({
   },
   cameraView: {
     backgroundColor: "#181c24",
-    width: "98%", // Más grande
-    height: 400,  // Más grande
+    width: "99%", // Más grande aún
+    height: 520,  // Mucho más grande
     borderWidth: 2,
     borderColor: "#5c7fa3",
     borderRadius: 32,
@@ -56,10 +56,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: "50%",
     left: "50%",
-    width: 260, // Más grande
-    height: 260, // Más grande
-    marginTop: -130,
-    marginLeft: -130,
+    width: 320, // Más grande
+    height: 320, // Más grande
+    marginTop: -160,
+    marginLeft: -160,
     borderWidth: 2.5,
     borderColor: "#8fa1b3",
     borderRadius: 20,
@@ -110,12 +110,12 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 4,
     backgroundColor: "#3e4a5b",
-    paddingVertical: 12,
-    paddingHorizontal: 6,
-    borderRadius: 12,
+    paddingVertical: 7, // Más pequeño
+    paddingHorizontal: 4, // Más pequeño
+    borderRadius: 10, // Un poco más pequeño
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 54,
+    minHeight: 38, // Más pequeño
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -131,8 +131,8 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#e5e6e8",
     fontWeight: "bold",
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 11, // Más pequeño
+    marginTop: 1,
     letterSpacing: 1,
     textShadowColor: "#232837",
     textShadowOffset: { width: 0, height: 1 },

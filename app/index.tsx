@@ -6,13 +6,15 @@ import * as Clipboard from "expo-clipboard"
 import { CameraView, type CameraType, useCameraPermissions, type BarcodeScanningResult } from "expo-camera"
 import * as Notifications from "expo-notifications"
 
-   import { connectDb, type Database } from "../src/database"
+import { connectDb, type Database } from "../src/database"
 import type { ScannedCode } from "../src/models"
 import styles from "./styles"
 
+// Configuración de modo local y URL de API para sincronización remota
 const isLocalMode = true
 const API_URL = "http://localhost:3000"
 
+// Configuración del manejador de notificaciones push
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -22,38 +24,47 @@ Notifications.setNotificationHandler({
   }),
 })
 
+/**
+ * Pantalla principal del escáner de QR.
+ * Permite escanear códigos, almacenarlos localmente, sincronizarlos y gestionarlos.
+ */
 export default function QRScannerScreen() {
   // === ESTADOS ===
-  const [location, setLocation] = useState<Location.LocationObject | null>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [facing, setFacing] = useState<CameraType>("back")
-  const [permission, requestPermission] = useCameraPermissions()
-  const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([])
-  const [db, setDB] = useState<Database>()
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [location, setLocation] = useState<Location.LocationObject | null>(null) // Ubicación actual del dispositivo
+  const [errorMsg, setErrorMsg] = useState<string | null>(null) // Mensaje de error para la ubicación
+  const [facing, setFacing] = useState<CameraType>("back") // Cámara activa (frontal o trasera)
+  const [permission, requestPermission] = useCameraPermissions() // Permisos de cámara
+  const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([]) // Lista de códigos escaneados
+  const [db, setDB] = useState<Database>() // Instancia de la base de datos local
+  const [isSyncing, setIsSyncing] = useState(false) // Estado de sincronización con el servidor
 
   // === REFS PARA CONTROL DE ESCANEO ===
-  const lastScannedCode = useRef<string>("")
-  const lastScannedTime = useRef<number>(0)
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isProcessingRef = useRef<boolean>(false)
+  const lastScannedCode = useRef<string>("") // Último código escaneado (no se usa, pero se deja por si se requiere)
+  const lastScannedTime = useRef<number>(0) // Tiempo del último escaneo (no se usa, pero se deja por si se requiere)
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Referencia para timeout de escaneo
+  const isProcessingRef = useRef<boolean>(false) // Indica si se está procesando un escaneo
 
   // === CONSTANTES DE CONFIGURACIÓN ===
-  const SCAN_COOLDOWN = 3000 // 3 segundos entre escaneos del mismo código
-  const PROCESSING_TIMEOUT = 1000 // 1 segundo para procesar un escaneo
+  const SCAN_COOLDOWN = 800 // Tiempo mínimo entre escaneos del mismo código (en ms)
+  const PROCESSING_TIMEOUT = 400 // Tiempo de bloqueo tras un escaneo (en ms)
 
+  /**
+   * Efecto inicial: solicita ubicación y conecta a la base de datos.
+   * También limpia el timeout al desmontar el componente.
+   */
   useEffect(() => {
+    // Solicita permisos y obtiene la ubicación actual
     async function getCurrentLocation() {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== "granted") {
         setErrorMsg("Permission to access location was denied")
         return
       }
-
       const location = await Location.getCurrentPositionAsync({})
       setLocation(location)
     }
 
+    // Conecta a la base de datos local y carga los códigos guardados
     async function retrieveLocalDbData() {
       try {
         const database = await connectDb()
@@ -68,7 +79,7 @@ export default function QRScannerScreen() {
     getCurrentLocation()
     retrieveLocalDbData()
 
-    // Cleanup al desmontar
+    // Limpieza al desmontar el componente
     return () => {
       if (scanTimeoutRef.current) {
         clearTimeout(scanTimeoutRef.current)
@@ -76,7 +87,10 @@ export default function QRScannerScreen() {
     }
   }, [])
 
-  // Función para actualizar datos
+  /**
+   * Actualiza la lista de códigos escaneados desde la base de datos.
+   * @param database Instancia de la base de datos
+   */
   const updateData = async (database: Database) => {
     try {
       const codes = await database.consultarCodigos()
@@ -86,42 +100,29 @@ export default function QRScannerScreen() {
     }
   }
 
-  // === FUNCIÓN DE ESCANEO ===
+  /**
+   * Maneja el evento de escaneo de un código de barras/QR.
+   * Siempre inserta el código, aunque ya exista.
+   */
   const onBarcodeScanned = async (result: BarcodeScanningResult) => {
-    const currentTime = Date.now()
     const scannedData = result.data
 
-    if (isProcessingRef.current) {
-      console.log("Escaneo ignorado: ya procesando")
-      return
-    }
-
-    if (lastScannedCode.current === scannedData && currentTime - lastScannedTime.current < SCAN_COOLDOWN) {
-      console.log("scaneo ignorado: mismo código muy reciente")
-      return
-    }
-
     isProcessingRef.current = true
-    lastScannedCode.current = scannedData
-    lastScannedTime.current = currentTime
 
     console.log("Procesando escaneo:", scannedData)
 
     try {
       if (db) {
-        const existe = await db.existeCodigo(scannedData)
-        if (existe) {
-          await showNotification(`Código ya escaneado: ${scannedData}`)
-        } else {
-          await showNotification(`Nuevo código escaneado: ${scannedData}`)
-          await db.insertarCodigo(scannedData, result.type)
-          await updateData(db)
-        }
+        // Siempre inserta el código, aunque ya exista
+        await showNotification(`Código escaneado: ${scannedData}`)
+        await db.insertarCodigo(scannedData, result.type)
+        await updateData(db)
       }
     } catch (error) {
       console.error("Error procesando escaneo:", error)
       Alert.alert("Error", "No se pudo procesar el código escaneado")
     } finally {
+      // Desbloquea el escaneo tras un pequeño timeout
       scanTimeoutRef.current = setTimeout(() => {
         isProcessingRef.current = false
         console.log("Escaneo desbloqueado")
@@ -129,7 +130,10 @@ export default function QRScannerScreen() {
     }
   }
 
-  // === FUNCIÓN DE SINCRONIZACIÓN ===
+  /**
+   * Sincroniza los códigos escaneados con el servidor remoto.
+   * Si está en modo local, solo muestra un mensaje.
+   */
   const syncWithServer = async () => {
     if (!scannedCodes.length) {
       Alert.alert("Sincronización", "No hay códigos para sincronizar")
@@ -176,7 +180,10 @@ export default function QRScannerScreen() {
     }
   }
 
-  // === FUNCIÓN DE NOTIFICACIONES ===
+  /**
+   * Muestra una notificación local o del sistema.
+   * @param message Mensaje a mostrar
+   */
   const showNotification = async (message: string) => {
     try {
       if (Platform.OS === "web") {
@@ -207,7 +214,10 @@ export default function QRScannerScreen() {
     }
   }
 
-  // === FUNCIÓN PARA LIMPIAR HISTORIAL ===
+  /**
+   * Limpia todos los códigos escaneados de la base de datos.
+   * Solicita confirmación al usuario.
+   */
   const clearScannedCodes = async () => {
     Alert.alert("Limpiar Historial", "¿Estás seguro de que quieres eliminar todos los códigos escaneados?", [
       { text: "Cancelar", style: "cancel" },
@@ -230,7 +240,10 @@ export default function QRScannerScreen() {
     ])
   }
 
-  // === FUNCIÓN PARA ELIMINAR CÓDIGO INDIVIDUAL ===
+  /**
+   * Elimina un código individual de la base de datos.
+   * @param id ID del código a eliminar
+   */
   const deleteCode = async (id: string) => {
     if (db) {
       try {
@@ -243,7 +256,7 @@ export default function QRScannerScreen() {
     }
   }
 
-  // === VERIFICACIÓN DE PERMISOS ===
+  // === VERIFICACIÓN DE PERMISOS DE CÁMARA ===
   if (!permission) {
     return <View style={styles.container} />
   }
@@ -257,7 +270,7 @@ export default function QRScannerScreen() {
     )
   }
 
-  // === PREPARACIÓN DE DATOS ===
+  // === PREPARACIÓN DE TEXTO DE UBICACIÓN ===
   let locationText = "Esperando ubicación..."
   if (errorMsg) {
     locationText = errorMsg
@@ -265,13 +278,17 @@ export default function QRScannerScreen() {
     locationText = `Lat: ${location.coords.latitude.toFixed(4)}, Long: ${location.coords.longitude.toFixed(4)}`
   }
 
-  // === COMPONENTE PARA ITEMS DE LA LISTA ===
+  /**
+   * Componente para renderizar cada código escaneado en la lista.
+   */
   const ScannedItem = ({ item }: { item: ScannedCode }) => {
+    // Copia el texto del código al portapapeles
     const onCopyPress = () => {
       Clipboard.setStringAsync(item.data)
       Alert.alert("Copiado", "Texto copiado al portapapeles")
     }
 
+    // Elimina el código tras confirmación
     const onDeletePress = () => {
       Alert.alert("Eliminar", "¿Estás seguro de que quieres eliminar este código?", [
         { text: "Cancelar", style: "cancel" },
@@ -304,17 +321,18 @@ export default function QRScannerScreen() {
     )
   }
 
+  // === RENDER PRINCIPAL ===
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Header */}
+      {/* Header con título y ubicación */}
       <View style={styles.header}>
         <Text style={styles.title}>QR Scanner</Text>
         <Text style={styles.subtitle}>{locationText}</Text>
       </View>
 
-      {/* Cámara */}
+      {/* Vista de la cámara para escanear códigos */}
       <CameraView
         facing={facing}
         style={styles.cameraView}
@@ -323,12 +341,7 @@ export default function QRScannerScreen() {
         }}
         onBarcodeScanned={onBarcodeScanned}
       >
-        {/* Overlay de escaneo */}
-        <View style={styles.scanFrame}>
-          <View style={styles.scanCorner} />
-        </View>
-
-        {/* Indicador de procesamiento */}
+        {/* Indicador de procesamiento mientras se guarda un código */}
         {isProcessingRef.current && (
           <View style={styles.scanOverlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -337,7 +350,7 @@ export default function QRScannerScreen() {
         )}
       </CameraView>
 
-      {/* Botones */}
+      {/* Botones de acción: notificación, sincronizar y limpiar */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={() => showNotification("Prueba de notificación")}>
           <Ionicons name="notifications-outline" size={20} color="#fff" />
@@ -365,7 +378,7 @@ export default function QRScannerScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Lista de códigos */}
+      {/* Lista de códigos escaneados */}
       <View style={styles.listContainer}>
         <Text style={styles.listTitle}>Códigos Escaneados ({scannedCodes.length})</Text>
 
